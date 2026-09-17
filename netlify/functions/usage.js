@@ -63,6 +63,78 @@ const CORS = {
   'Content-Type': 'application/json',
 };
 
+const TOKENHUB_HOST = 'tokenhub.intl.tencentcloudapi.com';
+const TOKENHUB_VERSION = '2026-03-22';
+
+// ================================================================
+// TokenHub API Client — generic call wrapper
+// ================================================================
+
+async function callTokenHubApi(secretId, secretKey, region, action, payload) {
+  const body = JSON.stringify(payload);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const authorization = buildAuth(secretId, secretKey, action, body, timestamp, TOKENHUB_HOST);
+
+  const res = await fetch('https://' + TOKENHUB_HOST, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-TC-Action': action,
+      'X-TC-Version': TOKENHUB_VERSION,
+      'X-TC-Timestamp': timestamp.toString(),
+      'X-TC-Region': region,
+      'Authorization': authorization,
+    },
+    body: body,
+  });
+
+  const json = await res.json();
+
+  if (json.Response && json.Response.Error) {
+    const e = json.Response.Error;
+    const err = new Error(e.Message || 'TokenHub API error');
+    err.code = e.Code;
+    err.requestId = json.Response.RequestId;
+    throw err;
+  }
+
+  return json.Response;
+}
+
+// ================================================================
+// Customer Config
+// ================================================================
+
+function getCustomerConfig() {
+  const raw = process.env.CUSTOMER_CONFIG;
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error('Failed to parse CUSTOMER_CONFIG:', e.message);
+    return {};
+  }
+}
+
+// In-memory cache for ApiKeyId resolution (survives across invocations)
+const apiKeyIdCache = {};
+
+// ================================================================
+// Response Helpers
+// ================================================================
+
+function jsonResponse(obj, status) {
+  return { statusCode: status || 200, headers: CORS, body: JSON.stringify(obj) };
+}
+
+function errorResponse(status, message, extra) {
+  return {
+    statusCode: status,
+    headers: CORS,
+    body: JSON.stringify(Object.assign({ error: message }, extra || {})),
+  };
+}
+
 // ================================================================
 // Netlify Function Handler
 // ================================================================
