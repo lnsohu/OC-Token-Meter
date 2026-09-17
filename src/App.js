@@ -48,7 +48,6 @@ function App() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const isCustomerView = route.view === 'customer';
   const customerId = route.customerId;
 
   const fetchData = useCallback(async () => {
