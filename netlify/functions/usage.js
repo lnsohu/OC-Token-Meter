@@ -54,6 +54,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
   'Content-Type': 'application/json',
+  'Cache-Control': 'no-store',
 };
 
 const TOKENHUB_HOST = 'tokenhub.intl.tencentcloudapi.com';
@@ -120,7 +121,7 @@ exports.handler = async (event) => {
   }
 
   const qp = event.queryStringParameters || {};
-  const days = Math.min(parseInt(qp.days || '7', 10) || 7, 90);
+  const days = Math.max(1, Math.min(parseInt(qp.days || '7', 10) || 7, 90));
   const dimension = qp.dimension || 'apikey';
   const customerId = qp.customer || null;
 
@@ -132,20 +133,29 @@ exports.handler = async (event) => {
     };
   }
 
+  // Rolling window ending now, independent of the function server's timezone.
+  // An explicit RFC3339 end_time allows repeatable reconciliation queries.
   const now = new Date();
-  const endTime = new Date(now);
-  endTime.setHours(0, 0, 0, 0);
-  const startTime = new Date(endTime);
-  startTime.setDate(startTime.getDate() - days);
+  const endTime = qp.end_time ? new Date(qp.end_time) : now;
+  if (qp.end_time && (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(qp.end_time) ||
+      !Number.isFinite(endTime.getTime()) || endTime > now)) {
+    return {
+      statusCode: 400,
+      headers: CORS,
+      body: JSON.stringify({ error: 'end_time must be an RFC3339 timestamp with timezone, not in the future.' }),
+    };
+  }
+  const startTime = new Date(endTime.getTime() - days * 24 * 60 * 60 * 1000);
 
   const action = 'DescribeUsageRankList';
-  const host = 'tokenhub.intl.tencentcloudapi.com';
+  const host = TOKENHUB_HOST;
 
   const body = JSON.stringify({
     Dimension: dimension,
     StartTime: toRFC3339(startTime),
     EndTime: toRFC3339(endTime),
-    Period: 86400,
+    // The default response is only 10 objects. ShowAll returns all usage rows.
+    ShowAll: true,
     MetricType: 'tokens',
   });
 
@@ -178,6 +188,20 @@ exports.handler = async (event) => {
     }
 
     let responseData = json.Response;
+    if (!res.ok || !responseData || !Array.isArray(responseData.TopList)) {
+      return {
+        statusCode: 502,
+        headers: CORS,
+        body: JSON.stringify({ error: 'Invalid TokenHub usage response.' }),
+      };
+    }
+    if (responseData.Total !== responseData.TopList.length) {
+      return {
+        statusCode: 502,
+        headers: CORS,
+        body: JSON.stringify({ error: 'TokenHub returned an incomplete key list despite ShowAll=true.', requestId: responseData.RequestId }),
+      };
+    }
     let customerInfo = null;
     if (customerId) {
       const cfg = CUSTOMERS[customerId];

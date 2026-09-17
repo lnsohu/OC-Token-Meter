@@ -34,6 +34,16 @@ const S = {
   raw: { background: '#f6f8fa', padding: 16, borderRadius: 8, fontSize: 12, fontFamily: 'monospace', overflow: 'auto', maxHeight: 400 },
 };
 
+function formatCn(value) {
+  if (!value) return '---';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '---';
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).format(date);
+}
+
 function App() {
   const [route, setRoute] = useState(parseHash);
   const [data, setData] = useState(null);
@@ -53,6 +63,7 @@ function App() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setData(null);
     try {
       let url = '/api/usage?days=' + days;
       if (customerId) url += '&customer=' + encodeURIComponent(customerId);
@@ -86,11 +97,18 @@ function App() {
           ? 'Token usage for assigned API Keys'
           : 'TokenHub Token Usage Dashboard (Admin)'}
       </p>
+      {raw && !loading && (
+        <p style={{ ...S.sub, margin: '0 0 16px 0' }}>
+          Showing {topList.length} / {raw.Total} API Keys returned for {formatCn(data?.period?.start)} to {formatCn(data?.period?.end)} (UTC+08:00, start inclusive, end exclusive).
+          {' '}Rolling time window ending at query time; refresh to include newer usage. TokenHub reporting may lag. Keys without usage may not be returned.
+        </p>
+      )}
+
 
       <div style={S.ctrl}>
-        {[7, 30, 90].map(d => (
+        {[1, 7, 30, 90].map(d => (
           <button key={d} style={days === d ? S.btnOn : S.btn} onClick={() => setDays(d)}>
-            Last {d} days
+            {d === 1 ? 'Last 24 hours' : `Last ${d} days`}
           </button>
         ))}
         <button style={S.btn} onClick={fetchData} disabled={loading}>Refresh</button>
