@@ -1,7 +1,10 @@
-const root = document.getElementById('root');
-root.innerHTML = `
-  <div style="text-align: center; margin-top: 50px;">
-    <h1>Hello World!</h1>
-    <p>This is a simple app deployed on Netlify.</p>
-  </div>
-`;
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);

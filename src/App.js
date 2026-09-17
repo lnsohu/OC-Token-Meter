@@ -1,10 +1,126 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+
+const S = {
+  page: { fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', maxWidth: 960, margin: '0 auto', padding: 24, color: '#1a1a1a' },
+  h1: { fontSize: 28, margin: '0 0 4px 0' },
+  sub: { fontSize: 14, color: '#888', margin: '0 0 24px 0' },
+  ctrl: { display: 'flex', gap: 8, marginBottom: 24 },
+  btn: { padding: '6px 16px', border: '1px solid #d9d9d9', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 14 },
+  btnOn: { padding: '6px 16px', border: '1px solid #1677ff', background: '#1677ff', borderRadius: 6, cursor: 'pointer', fontSize: 14, color: '#fff' },
+  cards: { display: 'flex', gap: 16, marginBottom: 32, flexWrap: 'wrap' },
+  card: { flex: '1 1 180px', padding: 20, background: '#fafafa', borderRadius: 8, border: '1px solid #f0f0f0' },
+  cardL: { fontSize: 13, color: '#888', marginBottom: 8 },
+  cardV: { fontSize: 26, fontWeight: 600 },
+  tbl: { width: '100%', borderCollapse: 'collapse', fontSize: 14 },
+  th: { textAlign: 'left', padding: '10px 16px', background: '#fafafa', borderBottom: '2px solid #f0f0f0', color: '#666' },
+  td: { padding: '10px 16px', borderBottom: '1px solid #f0f0f0' },
+  mono: { fontFamily: 'monospace', fontSize: 13 },
+  loading: { textAlign: 'center', padding: 48, color: '#999' },
+  err: { padding: 16, background: '#fff2f0', border: '1px solid #ffccc7', borderRadius: 8, color: '#cf1322', fontSize: 14 },
+  raw: { background: '#f6f8fa', padding: 16, borderRadius: 8, fontSize: 12, fontFamily: 'monospace', overflow: 'auto', maxHeight: 400 },
+};
 
 function App() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [days, setDays] = useState(7);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/usage?days=' + days);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
+      setData(json);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [days]);
+
+  useEffect(() => { fetchData(); }, [fetchData]); // eslint-disable-line
+
+  const fmt = (n) => (n != null && !isNaN(n) ? Number(n).toLocaleString() : '—');
+  const raw = data?.raw;
+  const ts = raw?.TotalStats || {};
+  const topList = raw?.TopList || [];
+
   return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h1>Hello World!</h1>
-      <p>This is a simple React app deployed on Netlify.</p>
+    <div style={S.page}>
+      <h1 style={S.h1}>OC Token Meter</h1>
+      <p style={S.sub}>TokenHub Token Usage Dashboard</p>
+
+      <div style={S.ctrl}>
+        {[7, 30, 90].map(d => (
+          <button key={d} style={days === d ? S.btnOn : S.btn} onClick={() => setDays(d)}>
+            Last {d} days
+          </button>
+        ))}
+        <button style={S.btn} onClick={fetchData} disabled={loading}>↻ Refresh</button>
+      </div>
+
+      {loading && <div style={S.loading}>Loading usage data…</div>}
+      {error && (
+        <div style={S.err}>
+          <b>⚠ Error</b>
+          <br />
+          {error}
+        </div>
+      )}
+
+      {raw && !loading && (
+        <>
+          <div style={S.cards}>
+            <div style={S.card}><div style={S.cardL}>Total Tokens</div><div style={S.cardV}>{fmt(ts.TotalToken)}</div></div>
+            <div style={S.card}><div style={S.cardL}>Input Tokens</div><div style={S.cardV}>{fmt(ts.InputTotalToken)}</div></div>
+            <div style={S.card}><div style={S.cardL}>Output Tokens</div><div style={S.cardV}>{fmt(ts.OutputTotalToken)}</div></div>
+            <div style={S.card}><div style={S.cardL}>Cache Tokens</div><div style={S.cardV}>{fmt(ts.CacheTotalToken)}</div></div>
+          </div>
+
+          <h2 style={{ fontSize: 18, marginBottom: 12 }}>Usage by API Key</h2>
+          {topList.length === 0 ? (
+            <p style={{ color: '#999' }}>No usage data found for the selected period.</p>
+          ) : (
+            <table style={S.tbl}>
+              <thead>
+                <tr>
+                  <th style={S.th}>#</th>
+                  <th style={S.th}>API Key ID</th>
+                  <th style={S.th}>Total</th>
+                  <th style={S.th}>Input</th>
+                  <th style={S.th}>Output</th>
+                  <th style={S.th}>Cache</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topList.map((item, i) => {
+                  const st = item.Stats || item;
+                  return (
+                    <tr key={i}>
+                      <td style={S.td}>{i + 1}</td>
+                      <td style={{ ...S.td, ...S.mono }}>{item.MetricKeys?.[0] || '—'}</td>
+                      <td style={S.td}>{fmt(st.TotalToken)}</td>
+                      <td style={S.td}>{fmt(st.InputTotalToken)}</td>
+                      <td style={S.td}>{fmt(st.OutputTotalToken)}</td>
+                      <td style={S.td}>{fmt(st.CacheTotalToken)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+
+          <details>
+            <summary style={{ cursor: 'pointer', marginTop: 16, color: '#666', fontSize: 14 }}>
+              Raw API Response
+            </summary>
+            <pre style={S.raw}>{JSON.stringify(raw, null, 2)}</pre>
+          </details>
+        </>
+      )}
     </div>
   );
 }
