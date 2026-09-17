@@ -156,6 +156,9 @@ exports.handler = async (event) => {
     EndTime: toRFC3339(endTime),
     // The default response is only 10 objects. ShowAll returns all usage rows.
     ShowAll: true,
+    // The API rejects requests without Period ("Period is required") even
+    // though ShowAll=true makes the value unused (daily granularity).
+    Period: 86400,
     MetricType: 'tokens',
   });
 

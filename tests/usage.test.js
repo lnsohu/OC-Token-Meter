@@ -32,7 +32,7 @@ test('usage request windows and complete key lists', async (t) => {
       assert.equal(request.Dimension, 'apikey');
       assert.equal(request.ShowAll, true);
       assert.equal(request.MetricType, 'tokens');
-      assert.equal(request.Period, undefined);
+      assert.equal(request.Period, 86400);
       assert.equal(request.EndTime, '2026-01-10T18:30:00.000+08:00');
       assert.equal(request.StartTime, '2026-01-03T18:30:00.000+08:00');
       assert.equal(JSON.parse(result.body).raw.TopList.length, 12);
