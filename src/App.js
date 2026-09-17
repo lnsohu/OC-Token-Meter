@@ -1,10 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
+// ================================================================
+// Hash-based routing:  #/c/:customerId  -> customer view
+// ================================================================
+
+function parseHash() {
+  const hash = window.location.hash.replace(/^#\/?/, '');
+  const parts = hash.split('/');
+  if (parts[0] === 'c' && parts[1]) {
+    return { view: 'customer', customerId: parts[1] };
+  }
+  return { view: 'admin', customerId: null };
+}
+
 const S = {
   page: { fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif', maxWidth: 960, margin: '0 auto', padding: 24, color: '#1a1a1a' },
   h1: { fontSize: 28, margin: '0 0 4px 0' },
   sub: { fontSize: 14, color: '#888', margin: '0 0 24px 0' },
-  ctrl: { display: 'flex', gap: 8, marginBottom: 24 },
+  badge: { display: 'inline-block', padding: '2px 10px', background: '#e6f4ff', color: '#1677ff', borderRadius: 12, fontSize: 12, marginLeft: 12, verticalAlign: 'middle' },
+  ctrl: { display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' },
   btn: { padding: '6px 16px', border: '1px solid #d9d9d9', background: '#fff', borderRadius: 6, cursor: 'pointer', fontSize: 14 },
   btnOn: { padding: '6px 16px', border: '1px solid #1677ff', background: '#1677ff', borderRadius: 6, cursor: 'pointer', fontSize: 14, color: '#fff' },
   cards: { display: 'flex', gap: 16, marginBottom: 32, flexWrap: 'wrap' },
@@ -21,16 +35,29 @@ const S = {
 };
 
 function App() {
+  const [route, setRoute] = useState(parseHash);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [days, setDays] = useState(7);
 
+  // Listen for hash changes
+  useEffect(() => {
+    const onHashChange = () => setRoute(parseHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const isCustomerView = route.view === 'customer';
+  const customerId = route.customerId;
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/usage?days=' + days);
+      let url = '/api/usage?days=' + days;
+      if (customerId) url += '&customer=' + encodeURIComponent(customerId);
+      const res = await fetch(url);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
       setData(json);
@@ -39,19 +66,27 @@ function App() {
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, customerId]);
 
   useEffect(() => { fetchData(); }, [fetchData]); // eslint-disable-line
 
-  const fmt = (n) => (n != null && !isNaN(n) ? Number(n).toLocaleString() : '—');
+  const fmt = (n) => (n != null && !isNaN(n) ? Number(n).toLocaleString() : '---');
   const raw = data?.raw;
   const ts = raw?.TotalStats || {};
   const topList = raw?.TopList || [];
+  const customerInfo = data?.customer;
 
   return (
     <div style={S.page}>
-      <h1 style={S.h1}>OC Token Meter</h1>
-      <p style={S.sub}>TokenHub Token Usage Dashboard</p>
+      <h1 style={S.h1}>
+        OC Token Meter
+        {customerInfo && <span style={S.badge}>{customerInfo.name}</span>}
+      </h1>
+      <p style={S.sub}>
+        {customerInfo
+          ? 'Token usage for assigned API Keys'
+          : 'TokenHub Token Usage Dashboard (Admin)'}
+      </p>
 
       <div style={S.ctrl}>
         {[7, 30, 90].map(d => (
@@ -59,13 +94,13 @@ function App() {
             Last {d} days
           </button>
         ))}
-        <button style={S.btn} onClick={fetchData} disabled={loading}>↻ Refresh</button>
+        <button style={S.btn} onClick={fetchData} disabled={loading}>Refresh</button>
       </div>
 
-      {loading && <div style={S.loading}>Loading usage data…</div>}
+      {loading && <div style={S.loading}>Loading usage data...</div>}
       {error && (
         <div style={S.err}>
-          <b>⚠ Error</b>
+          <b>Error</b>
           <br />
           {error}
         </div>
@@ -88,7 +123,7 @@ function App() {
               <thead>
                 <tr>
                   <th style={S.th}>#</th>
-                  <th style={S.th}>API Key ID</th>
+                  <th style={S.th}>API Key Name</th>
                   <th style={S.th}>Total</th>
                   <th style={S.th}>Input</th>
                   <th style={S.th}>Output</th>
@@ -101,7 +136,7 @@ function App() {
                   return (
                     <tr key={i}>
                       <td style={S.td}>{i + 1}</td>
-                      <td style={{ ...S.td, ...S.mono }}>{item.MetricKeys?.[0] || '—'}</td>
+                      <td style={{ ...S.td, ...S.mono }}>{item.Name || item.Key || '---'}</td>
                       <td style={S.td}>{fmt(st.TotalToken)}</td>
                       <td style={S.td}>{fmt(st.InputTotalToken)}</td>
                       <td style={S.td}>{fmt(st.OutputTotalToken)}</td>
